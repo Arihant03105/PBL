@@ -51,7 +51,14 @@ export default function Upload() {
                     { method: 'POST', body: formData }
                 )
                 const data = await res.json()
+
+                if (!res.ok) {
+                    console.error('Cloudinary Upload Error:', data)
+                    throw new Error(data.error?.message || 'Cloudinary upload failed')
+                }
+
                 fileUrl = data.secure_url
+                console.log('Upload successful:', data.resource_type, fileUrl)
                 setProgress(70)
             } else {
                 // Cloudinary not configured — save metadata only (demo mode)

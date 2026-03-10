@@ -1,16 +1,13 @@
 import { useState, useEffect } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Helmet } from 'react-helmet-async'
-import { Star, Download, BookOpen, User, Clock, FileText, ThumbsUp, Share2, Bookmark, ChevronLeft, Tag, GraduationCap, Globe } from 'lucide-react'
-import { doc, getDoc } from 'firebase/firestore'
+import { Star, Download, BookOpen, User, Clock, FileText, ThumbsUp, Share2, Bookmark, ChevronLeft, Tag, GraduationCap, Globe, Eye } from 'lucide-react'
+import { doc, getDoc, collection, addDoc, query, where, orderBy, onSnapshot, serverTimestamp } from 'firebase/firestore'
 import { db } from '../firebase'
+import { useAuth } from '../context/AuthContext'
 
 // ... (REVIEWS, Stars components remain unchanged)
-const REVIEWS = [
-    { id: 1, user: 'Sneha T.', rating: 5, text: 'Absolutely wonderful notes! Covered everything for the exam. The diagrams are super clear.', date: '1 day ago', likes: 23 },
-    { id: 2, user: 'Vikram P.', rating: 5, text: 'Best resource I found for this subject. Highly recommended to all juniors.', date: '3 days ago', likes: 18 },
-    { id: 3, user: 'Ananya R.', rating: 4, text: 'Very helpful, but could use more practice problems. Overall a 4-star resource.', date: '5 days ago', likes: 9 },
-]
+// Hardcoded reviews removed to be replaced by dynamic ones
 
 function Stars({ rating, size = 14 }) {
     return (
@@ -27,28 +24,40 @@ export default function MaterialDetail() {
     const { id } = useParams()
     const [mat, setMat] = useState(null)
     const [loading, setLoading] = useState(true)
+    const [reviews, setReviews] = useState([])
     const [userRating, setUserRating] = useState(0)
     const [hoverRating, setHoverRating] = useState(0)
-    const [review, setReview] = useState('')
+    const [reviewText, setReviewText] = useState('')
+    const [submittingReview, setSubmittingReview] = useState(false)
     const [bookmarked, setBookmarked] = useState(false)
     const [downloaded, setDownloaded] = useState(false)
+    const { currentUser, userProfile } = useAuth()
 
     function handleDownload() {
         if (!mat?.fileUrl) return
 
-        // Try multiple approaches for the best download experience
         const safeTitle = (mat.title || 'material').replace(/[^a-z0-9]/gi, '_').toLowerCase()
+        const extension = mat.fileUrl.split('.').pop().split(/[?#]/)[0] || 'pdf'
+        const fileName = `${safeTitle}.${extension}`
 
-        // Approach 1: Try Cloudinary transformation to force download
-        const downloadUrl = mat.fileUrl.replace('/upload/', `/upload/fl_attachment:${safeTitle}/`)
-
-        // Open the download URL in a new window
-        const win = window.open(downloadUrl, '_blank')
-
-        // If the window didn't open or was blocked, fallback to original URL
-        if (!win || win.closed || typeof win.closed === 'undefined') {
-            window.location.href = mat.fileUrl
+        // Improved Cloudinary Download URL
+        let downloadUrl = mat.fileUrl
+        if (mat.fileUrl.includes('cloudinary.com')) {
+            // Replace /upload/ with /upload/fl_attachment:filename/
+            // Handles cases with version numbers (v12345/...)
+            downloadUrl = mat.fileUrl.replace(/\/upload\/(?:v\d+\/)?/, (match) => {
+                return `${match}fl_attachment:${safeTitle}/`
+            })
         }
+
+        // Create a hidden link and click it to force download
+        const link = document.createElement('a')
+        link.href = downloadUrl
+        link.setAttribute('download', fileName)
+        link.setAttribute('target', '_blank')
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
 
         setDownloaded(true)
         setTimeout(() => setDownloaded(false), 3000)
@@ -57,23 +66,60 @@ export default function MaterialDetail() {
     useEffect(() => {
         async function fetchMaterial() {
             try {
-                console.log("Fetching material for ID:", id)
                 const docRef = doc(db, 'materials', id)
                 const docSnap = await getDoc(docRef)
                 if (docSnap.exists()) {
-                    console.log("Material found:", docSnap.data().title)
                     setMat({ id: docSnap.id, ...docSnap.data() })
-                } else {
-                    console.warn("Material not found for ID:", id)
                 }
             } catch (err) {
                 console.error("Error fetching material:", err)
             }
-            console.log("Setting loading to false")
             setLoading(false)
         }
+
+        // Fetch Reviews
+        const reviewsQuery = query(
+            collection(db, 'reviews'),
+            where('materialId', '==', id),
+            orderBy('createdAt', 'desc')
+        )
+
+        const unsubscribe = onSnapshot(reviewsQuery, (snapshot) => {
+            const reviewsData = snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            }))
+            setReviews(reviewsData)
+        })
+
         fetchMaterial()
+        return () => unsubscribe()
     }, [id])
+
+    const handleSubmitReview = async (e) => {
+        e.preventDefault()
+        if (!currentUser) return alert('Please sign in to post a review')
+        if (userRating === 0) return alert('Please select a rating')
+        if (!reviewText.trim()) return alert('Please enter a comment')
+
+        setSubmittingReview(true)
+        try {
+            await addDoc(collection(db, 'reviews'), {
+                materialId: id,
+                userId: currentUser.uid,
+                user: userProfile?.name || 'Anonymous',
+                rating: userRating,
+                text: reviewText.trim(),
+                createdAt: serverTimestamp()
+            })
+            setReviewText('')
+            setUserRating(0)
+        } catch (err) {
+            console.error('Error submitting review:', err)
+            alert('Failed to submit review')
+        }
+        setSubmittingReview(false)
+    }
 
     if (loading) {
         return (
@@ -150,9 +196,11 @@ export default function MaterialDetail() {
                             </section>
 
                             <div className="flex items-center gap-3 mb-4">
-                                <Stars rating={mat.rating || 4.5} size={18} />
-                                <span className="font-bold text-lg" style={{ color: 'var(--edu-text)' }}>{mat.rating || 4.5}</span>
-                                <span className="text-sm" style={{ color: 'var(--edu-muted)' }}>({REVIEWS.length} reviews)</span>
+                                <Stars rating={mat.rating || (reviews.length > 0 ? (reviews.reduce((acc, curr) => acc + curr.rating, 0) / reviews.length) : 4.5)} size={18} />
+                                <span className="font-bold text-lg" style={{ color: 'var(--edu-text)' }}>
+                                    {(reviews.length > 0 ? (reviews.reduce((acc, curr) => acc + curr.rating, 0) / reviews.length) : (mat.rating || 4.5)).toFixed(1)}
+                                </span>
+                                <span className="text-sm" style={{ color: 'var(--edu-muted)' }}>({reviews.length} reviews)</span>
                             </div>
 
                             <div className="text-sm leading-relaxed" style={{ color: 'var(--edu-muted)' }}>
@@ -182,21 +230,81 @@ export default function MaterialDetail() {
 
                         <section className="card p-6">
                             <h3 className="font-bold text-base mb-5" style={{ color: 'var(--edu-text)' }}>Community Reviews</h3>
-                            <div className="space-y-4">
-                                {REVIEWS.map(r => (
-                                    <div key={r.id} className="p-4 rounded-xl bg-white/5">
-                                        <div className="flex items-center justify-between mb-2">
-                                            <div className="flex items-center gap-2">
-                                                <div className="w-8 h-8 rounded-full bg-indigo-500/20 text-indigo-300 flex items-center justify-center text-xs font-bold">
-                                                    {r.user[0]}
-                                                </div>
-                                                <span className="text-sm font-medium">{r.user}</span>
-                                            </div>
-                                            <Stars rating={r.rating} size={12} />
-                                        </div>
-                                        <p className="text-sm text-slate-400">{r.text}</p>
+
+                            {/* Review Form */}
+                            {currentUser ? (
+                                <form onSubmit={handleSubmitReview} className="mb-8 p-4 rounded-xl bg-indigo-500/5 border border-indigo-500/10">
+                                    <h4 className="text-sm font-semibold mb-3">Leave a Review</h4>
+                                    <div className="flex items-center gap-2 mb-4">
+                                        {[1, 2, 3, 4, 5].map(s => (
+                                            <button
+                                                key={s}
+                                                type="button"
+                                                onMouseEnter={() => setHoverRating(s)}
+                                                onMouseLeave={() => setHoverRating(0)}
+                                                onClick={() => setUserRating(s)}
+                                                className="transition-transform hover:scale-110"
+                                            >
+                                                <Star
+                                                    size={22}
+                                                    style={{ color: s <= (hoverRating || userRating) ? '#fbbf24' : 'var(--edu-border)' }}
+                                                    className={s <= (hoverRating || userRating) ? 'fill-yellow-400' : ''}
+                                                />
+                                            </button>
+                                        ))}
+                                        <span className="text-xs ml-2" style={{ color: 'var(--edu-muted)' }}>
+                                            {userRating > 0 ? `${userRating} Stars` : 'Select rating'}
+                                        </span>
                                     </div>
-                                ))}
+                                    <textarea
+                                        value={reviewText}
+                                        onChange={(e) => setReviewText(e.target.value)}
+                                        placeholder="Share your thoughts about this material..."
+                                        className="input-field mb-3 min-h-[100px] resize-none"
+                                        required
+                                    />
+                                    <button
+                                        type="submit"
+                                        disabled={submittingReview}
+                                        className="btn-primary py-2 px-6 text-sm glow"
+                                    >
+                                        {submittingReview ? 'Posting...' : 'Post Review'}
+                                    </button>
+                                </form>
+                            ) : (
+                                <div className="mb-8 p-4 rounded-xl bg-slate-800/50 border border-slate-700 text-center">
+                                    <p className="text-sm mb-3" style={{ color: 'var(--edu-muted)' }}>Sign in to share your review</p>
+                                    <Link to="/login" className="btn-secondary py-1.5 px-4 text-xs">Login</Link>
+                                </div>
+                            )}
+
+                            <div className="space-y-4">
+                                {reviews.length > 0 ? (
+                                    reviews.map(r => (
+                                        <div key={r.id} className="p-4 rounded-xl bg-white/5 animate-fadeInUp">
+                                            <div className="flex items-center justify-between mb-2">
+                                                <div className="flex items-center gap-2">
+                                                    <div className="w-8 h-8 rounded-full bg-indigo-500/20 text-indigo-300 flex items-center justify-center text-xs font-bold">
+                                                        {r.user?.[0] || 'A'}
+                                                    </div>
+                                                    <div>
+                                                        <span className="text-sm font-medium block">{r.user || 'Anonymous'}</span>
+                                                        <span className="text-[10px]" style={{ color: 'var(--edu-muted)' }}>
+                                                            {r.createdAt?.toDate ? r.createdAt.toDate().toLocaleDateString() : 'Just now'}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                <Stars rating={r.rating} size={12} />
+                                            </div>
+                                            <p className="text-sm text-slate-400">{r.text}</p>
+                                        </div>
+                                    ))
+                                ) : (
+                                    <div className="text-center py-6 opacity-40">
+                                        <ThumbsUp size={32} className="mx-auto mb-2" />
+                                        <p className="text-sm italic">No reviews yet. Be the first to review!</p>
+                                    </div>
+                                )}
                             </div>
                         </section>
 
@@ -207,11 +315,10 @@ export default function MaterialDetail() {
                             </h3>
                             <div className="rounded-xl overflow-hidden bg-slate-900 border border-slate-800 aspect-[3/4] md:aspect-video relative group shadow-2xl">
                                 {mat.fileUrl?.toLowerCase().endsWith('.pdf') || mat.fileUrl?.includes('/upload/') ? (
-                                    <iframe
-                                        src={`https://docs.google.com/viewer?url=${encodeURIComponent(mat.fileUrl)}&embedded=true`}
+                                    <embed
+                                        src={`${mat.fileUrl}#toolbar=0&navpanes=0&scrollbar=0`}
+                                        type="application/pdf"
                                         className="w-full h-full border-none"
-                                        title="Material Preview"
-                                        onError={(e) => console.error('Iframe error:', e)}
                                     />
                                 ) : (
                                     <div className="flex flex-col items-center justify-center h-full text-slate-500 p-10 text-center">
@@ -228,6 +335,23 @@ export default function MaterialDetail() {
                                         </div>
                                     </div>
                                 )}
+                            </div>
+                            {/* Fallback link if preview still fails */}
+                            <div className="mt-4 p-4 rounded-xl bg-slate-800/30 border border-slate-700/50">
+                                <p className="text-xs mb-3" style={{ color: 'var(--edu-muted)' }}>
+                                    If the preview doesn't load, <a href={mat.fileUrl} target="_blank" rel="noopener noreferrer" className="text-indigo-400 hover:underline font-medium">click here to open the file in a new tab</a>.
+                                </p>
+
+                                <div className="pt-3 border-t border-slate-700/50">
+                                    <h4 className="text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: 'var(--edu-text)' }}>
+                                        Troubleshooting Access (Error 401)
+                                    </h4>
+                                    <ul className="text-[10px] space-y-1.5 list-disc pl-4" style={{ color: 'var(--edu-muted)' }}>
+                                        <li>Ensure your Cloudinary **Upload Preset** is set to **'Unsigned'** and **'Public'**.</li>
+                                        <li>If you see 'Unauthorized', check if **Strict Referrer Policy** or **Signed URLs** are enabled in Cloudinary settings.</li>
+                                        <li>Verify that the resource type is correctly detected (PDF vs Image).</li>
+                                    </ul>
+                                </div>
                             </div>
                         </div>
                         <div className="flex flex-col sm:flex-row justify-between items-center mt-3 px-2 gap-3">
@@ -257,9 +381,10 @@ export default function MaterialDetail() {
 
                             <button
                                 onClick={() => document.getElementById('preview')?.scrollIntoView({ behavior: 'smooth' })}
-                                className="btn-secondary w-full justify-center py-2 mb-3 no-underline text-xs"
+                                className="btn-secondary w-full justify-center py-2.5 mb-3 no-underline text-xs"
+                                style={{ background: 'rgba(99,102,241,0.1)', borderColor: 'rgba(99,102,241,0.3)', color: '#a5b4fc' }}
                             >
-                                <BookOpen size={14} /> Read Online (Preview)
+                                <Eye size={14} /> Preview Material
                             </button>
 
                             <button onClick={() => setBookmarked(!bookmarked)} className="btn-secondary w-full justify-center py-2.5">

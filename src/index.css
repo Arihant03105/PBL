@@ -8,6 +8,15 @@
   --edu-primary-dark: #4f46e5;
   --edu-secondary: #8b5cf6;
   --edu-accent: #06b6d4;
+  --edu-bg: #f8fafc;
+  --edu-surface: #ffffff;
+  --edu-card: #f1f5f9;
+  --edu-border: #e2e8f0;
+  --edu-text: #0f172a;
+  --edu-muted: #64748b;
+}
+
+.dark {
   --edu-bg: #09090f;
   --edu-surface: #0f0f1a;
   --edu-card: #13131f;
@@ -15,6 +24,7 @@
   --edu-text: #e2e8f0;
   --edu-muted: #64748b;
 }
+
 
 * {
   box-sizing: border-box;
@@ -156,6 +166,11 @@ body {
     background-size: 1rem;
     padding-right: 2.5rem;
     cursor: pointer;
+  }
+
+  select.input-field option {
+    background-color: #13131f; /* Matches --edu-card */
+    color: #e2e8f0; /* Matches --edu-text */
   }
 
   .input-field::placeholder {

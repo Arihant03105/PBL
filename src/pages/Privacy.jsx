@@ -59,14 +59,21 @@ export default function Privacy() {
                     </section>
 
                     <section className="card p-8">
-                        <h2 className="text-xl font-bold mb-4 text-white">Third-Party Services</h2>
-                        <p className="text-sm text-slate-400 leading-relaxed mb-4">
-                            We may use third-party services like Google AdSense to display advertisements. These services may use cookies and similar technologies to collect information about your activities across different websites.
-                        </p>
-                        <div className="p-4 rounded-lg bg-indigo-500/5 border border-indigo-500/10">
-                            <p className="text-xs text-indigo-300">
-                                <strong>Note:</strong> You can opt-out of personalized advertising by visiting Google's Ads Settings.
+                        <h2 className="text-xl font-bold mb-4 text-white flex items-center gap-2">
+                            Google AdSense & Cookies
+                        </h2>
+                        <div className="space-y-4 text-sm text-slate-400 leading-relaxed">
+                            <p>
+                                We use Google AdSense to serve ads on our website. Google, as a third-party vendor, uses cookies to serve ads on your site. Google's use of advertising cookies enables it and its partners to serve ads to your users based on their visit to your sites and/or other sites on the Internet.
                             </p>
+                            <p>
+                                Users may opt out of personalized advertising by visiting <a href="https://www.google.com/settings/ads" target="_blank" rel="noopener noreferrer" className="text-indigo-400 hover:underline">Ads Settings</a>. Alternatively, you can opt out of a third-party vendor's use of cookies for personalized advertising by visiting <a href="https://www.aboutads.info" target="_blank" rel="noopener noreferrer" className="text-indigo-400 hover:underline">www.aboutads.info</a>.
+                            </p>
+                            <div className="p-4 rounded-lg bg-indigo-500/5 border border-indigo-500/10">
+                                <p className="text-xs text-indigo-300">
+                                    <strong>AdSense Compliance:</strong> Our privacy policy is designed to inform you of the cookies used by Google and how you can manage your preferences.
+                                </p>
+                            </div>
                         </div>
                     </section>
                 </div>

@@ -48,14 +48,22 @@ function AppRoutes() {
   )
 }
 
+import { HelmetProvider } from 'react-helmet-async'
+import { ThemeProvider } from './context/ThemeContext'
+
 function App() {
   return (
-    <AuthProvider>
-      <Router>
-        <AppRoutes />
-      </Router>
-    </AuthProvider>
+    <HelmetProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          <Router>
+            <AppRoutes />
+          </Router>
+        </AuthProvider>
+      </ThemeProvider>
+    </HelmetProvider>
   )
 }
+
 
 export default App

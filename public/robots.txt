@@ -1,7 +1,11 @@
+# EduExchange Robots.txt
+# Optimized for Google AdSense and Search Engines
+
 User-agent: *
 Allow: /
 Disallow: /dashboard
 Disallow: /upload
 Disallow: /profile
 
+# Sitemaps
 Sitemap: https://edu-exchange.vercel.app/sitemap.xml
